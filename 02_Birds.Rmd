@@ -1,5 +1,5 @@
 ---
-title: "Ch 02: Birds"
+title: "02_Birds"
 output: html_document
 ---
 # Organizing Breeding Timing Data
