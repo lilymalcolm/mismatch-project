@@ -1,0 +1,1237 @@
+---
+title: "Ch 01: Degree Days"
+output: html_document
+---
+```{r}
+library(matrixStats)
+library(sp)
+library(maptools)
+library(maps)
+library(raster)
+library(colorRamps)
+library(rgdal)
+library(scales)
+library(animation)
+library(dismo)
+library(deldir)
+library(rgeos)
+library(gstat)
+```
+
+# Organizing NOAA Data
+These chunks take raw data from The National Oceanic and Atmospheric Administration's daily climate summaries and join them into one dataframe.
+
+Menne, M.J., I. Durre, R.S. Vose, B.E. Gleason, and T.G. Houston, 2012:  An overview 
+of the Global Historical Climatology Network-Daily Database.  Journal of Atmospheric 
+and Oceanic Technology, 29, 897-910, doi:10.1175/JTECH-D-11-00103.1.
+
+## Working Example
+```{r}
+data_2014_to_2016 <- c(NA, NA, NA, NA)
+names(data_2014_to_2016)<- c("Station", "Date", "DataType", "DataValue")
+datafiles <- list.files(path="NOAA daily temp data", full.names = TRUE)
+
+for (i in datafiles){
+  a <- read.csv(as.character(i))
+  names(a) <- names(data_2014_to_2016)
+  data_2014_to_2016 <- rbind(data_2014_to_2016, a)
+}
+
+data_2014_to_2016 <- data_2014_to_2016[-1,]
+data_2014_to_2016 <- data_2014_to_2016[,-5:-8]
+head(data_2014_to_2016)
+save("data_2014_to_2016", file = "Temperature Data/2014_to_2016.Rdata")
+```
+
+## Generic Example
+```{r, eval = FALSE}
+temperature_data <- c(NA, NA, NA, NA)
+names(temperature_data)<- c("Station", "Date", "DataType", "DataValue")
+datafiles <- list.files(path="NOAA daily temp data", full.names = TRUE)
+
+for (i in datafiles){
+  a <- read.csv(as.character(i))
+  names(a) <- names(temperature_data)
+  temperature_data <- rbind(temperature_data, a)
+}
+
+temperature_data <- temperature_data[-1,]
+
+save("temperature_data", file = "Temperature Data/temperature_data.Rdata")
+```
+
+## Actual Output
+```{r}
+load("Temperature Data/1937_to_1946.Rdata")
+load("Temperature Data/1947_to_1956.Rdata")
+load("Temperature Data/2007_to_2017.Rdata")
+```
+
+# Calculating Average Temperature
+To calculate the average temperature, I subset the data for minimum and maximum temperature values and then merge these two dataframes by station and date. I then calculate the average of the minimum and maximum values.
+
+## Calculate Maximum Temperature
+These chunks subset a dataframe for maximum temperature and for a specific range of dates.
+
+### Working Example
+```{r}
+# load the station data
+stations <- read.csv("stations.csv")
+latlong <- stations[1:3] 
+names(latlong) <- c("Station", "Latitude", "Longitude")
+
+# set -9999 to NAs
+for(i in 1:4){
+data_2014_to_2016[which(data_2014_to_2016[,i] == "-9999"),i] <- NA
+}
+
+maxt <- subset(data_2014_to_2016, DataType == "TMAX", select = c(Station:DataValue))
+
+# convert units to Celsius
+maxt[,4] <- (maxt[,4])/10
+
+# merge temperature data with station data
+data_maxt <- merge(maxt, latlong, by = "Station")
+save("data_maxt", file = "2014_to_2016_maxtemp.Rdata")
+```
+
+### Generic Example
+```{r, eval = FALSE}
+# load the data set and station data
+load("Temperature Data/temperature_data.Rdata")
+stations <- read.csv("stations.csv")
+latlong <- stations[1:3] 
+names(latlong) <- c("Station", "Latitude", "Longitude")
+
+# set -9999 to NAs
+for(i in 1:8){
+temperature_data[which(temperature_data[,i] == "-9999"),i] <- NA
+}
+
+maxt <- subset(temperature_data, DataType == "TMAX", select = c(Station:DataValue))
+
+# convert units to Celsius
+maxt[,4] <- (maxt[,4])/10
+
+# merge temperature data with station data
+data_maxt <- merge(maxt, latlong, by = "Station")
+save("data_maxt", file = "temperature_data_maxtemp.Rdata")
+```
+### Actual Output
+```{r}
+load("TMAX/1937_to_1946_maxtemp.Rdata")
+load("TMAX/1947_to_1956_maxtemp.Rdata")
+load("TMAX/2007to2017_maxtemp.Rdata")
+```
+
+## Calculate Minimum Temperature
+These chunks subset a dataframe for minimum temperature and for a specific range of dates.
+
+### Working Example
+```{r}
+mint <- subset(data_2014_to_2016, DataType == "TMIN", select = c(Station:DataValue))
+
+# convert units to Celsius
+mint[,4] <- (mint[,4])/10
+
+# merge temperature data with station data
+data_mint <- merge(mint, latlong, by = "Station")
+save("data_mint", file = "2014_to_2016_mintemp.Rdata")
+```
+
+### Generic Example
+```{r, eval = FALSE}
+# load the data set and station data
+load("Temperature Data/temperature_data.Rdata")
+stations <- read.csv("stations.csv")
+latlong <- stations[1:3] 
+names(latlong) <- c("Station", "Latitude", "Longitude")
+
+# set -9999 to NAs
+for(i in 1:8){
+temperature_data[which(temperature_data[,i] == "-9999"),i] <- NA
+}
+
+mint <- subset(temperature_data, DataType == "TMIN", select = c(Station:DataValue))
+
+# convert units to Celsius
+mint[,4] <- (mint[,4])/10
+
+# merge temperature data with station data
+data_mint <- merge(mint, latlong, by = "Station")
+save("data_mint", file = "temperature_data_mintemp.Rdata")
+```
+
+### Actual Output
+```{r}
+load("TMIN/1937_to_1946_mintemp.Rdata")
+load("TMIN/1947_to_1956_mintemp.Rdata")
+load("TMIN/2007to2017_mintemp.Rdata")
+```
+
+## Calculate Average Temperature
+
+### Working Example
+```{r}
+data_maxt <- data_maxt[order(data_maxt[,1], data_maxt[,2]),]
+head(data_maxt)
+
+data_mint <- data_mint[order(data_mint[,1], data_mint[,2]),]
+head(data_mint)
+
+data_avgt <- merge(data_maxt, data_mint, by=c("Station", "Date"))
+head(data_avgt)
+
+data_avgt <- data_avgt[order(data_avgt[,1], data_avgt[,2]),]
+
+tavg <- (data_avgt[,4] + data_avgt[,8])/2
+
+avg_data <- cbind(data_avgt, tavg)
+avg_data <- avg_data[,-3:-8]
+head(avg_data)
+
+names(avg_data) <- c("Station", "Date", "Latitude", "Longitude", "TAVG")
+
+save("avg_data", file = "2014_to_2016_avgt.Rdata")
+```
+
+### Generic Example
+```{r, eval = FALSE}
+# load minimum temperature data
+load("TMIN/temperature_data_mintemp.Rdata")
+
+# load maximum temperature data
+load("TMAX/temperature_data_maxtemp.Rdata")
+
+data_maxt <- data_maxt[order(data_maxt[,1], data_maxt[,2]),]
+head(data_maxt)
+
+data_mint <- data_mint[order(data_mint[,1], data_mint[,2]),]
+head(data_mint)
+
+data_avgt <- merge(data_maxt, data_mint, by=c("Station", "Date"))
+head(data_avgt)
+
+data_avgt <- data_avgt[order(data_avgt[,1], data_avgt[,2]),]
+
+tavg <- (data_avgt[,4] + data_avgt[,8])/2
+
+avg_data <- cbind(data_avgt, tavg)
+avg_data <- avg_data[,-3:-4]
+head(avg_data)
+
+names(avg_data) <- c("Station", "Date", "Latitude", "Longitude", "TAVG")
+
+save("avg_data", file = "temperature_data_avgt.Rdata")
+```
+
+### Actual Output
+```{r}
+load("1941_to_1950_avgt.Rdata")
+load("2007_to_2017_avgt.Rdata")
+```
+
+## Calculate multi-year averages
+These chunks calculate the daily average over multiple years. The dataframe is broken up by year and then merged by day. The average temperature is then calculated for each row.
+
+### Working Example
+```{r}
+avg_data$year <- substr(avg_data[,2], 1, 4)
+avg_data$day <- substr(avg_data[,2], 5, 8)
+
+# break up the dataset by year
+years <- as.character(avg_data[!duplicated(avg_data$year),]$year)
+list_subsets <- list()
+
+for (i in years){
+  year_subset <- subset(avg_data, year == i)
+  varname = paste0("data_", i)
+  assign(varname, year_subset)
+  list_subsets[[i]] <- get(varname)
+}
+
+for (i in 2:length(list_subsets)){
+  list_subsets[[i]] <- list_subsets[[i]][c(1,5,7)]
+}
+
+
+# merge those individual datasets by date (not year) and station
+merged_data <- Reduce(function(x,y) merge(x, y, by = c("Station", "day"), all = TRUE), list_subsets)
+
+#take the average of all values
+merged_data$average <- rowMeans(merged_data[,c(6, 8:ncol(merged_data))], na.rm = TRUE)
+
+average3yeartemp <- merged_data[c(1:2,4:5,ncol(merged_data))]
+
+save("average3yeartemp", file = "average3yeartemp_example.Rdata")
+
+```
+
+### Generic Example
+
+```{r, eval = FALSE}
+avg_data$year <- substr(avg_data[,2], 1, 4)
+avg_data$day <- substr(avg_data[,2], 5, 8)
+
+# break up the dataset by year
+years <- as.character(avg_data[!duplicated(avg_data$year),]$year)
+list_subsets <- list()
+
+for (i in years){
+  year_subset <- subset(avg_data, year == i)
+  varname = paste0("data_", i)
+  assign(varname, year_subset)
+  list_subsets[[i]] <- get(varname)
+}
+
+for (i in 2:length(list_subsets)){
+  list_subsets[[i]] <- list_subsets[[i]][c(1,5,7)]
+}
+
+# merge those individual datasets by date (not year) and station
+merged_data <- Reduce(function(x,y) merge(x, y, by = c("Station", "day"), all = TRUE), list_subsets)
+
+#take the average of all values
+merged_data$average <- rowMeans(merged_data[,c(6, 8:ncol(merged_data))], na.rm = TRUE)
+
+averagemultiyeartemp <- merged_data[c(1:2,4:5,ncol(merged_data))]
+
+save("averagemultiyeartemp", file = "averagemultiyeartemp.Rdata")
+
+```
+
+### Acutual Output
+```{r}
+load("past_average10yeartemp.Rdata")
+load("average10yeartemp.Rdata")
+```
+
+## Calculate Temporal Variance
+These chunks calculate the variance in the multi-year averages. They reorganize the datasets as seen in the chunks above, and calculate the standard deviation for each row's average temperatures.
+
+### Working Example
+```{r}
+# get the averages before calculating accumulation
+avg_data$year <- substr(avg_data[,2], 1, 4)
+# get the date without the year
+avg_data$day <- substr(avg_data[,2], 5, 8)
+
+# break the dataset up by year
+years <- as.character(avg_data[!duplicated(avg_data$year),]$year)
+list_subsets <- list()
+
+for (i in years){
+  year_subset <- subset(avg_data, year == i)
+  varname = paste0("data_", i)
+  assign(varname, year_subset)
+  list_subsets[[i]] <- get(varname)
+}
+
+for (i in 2:length(list_subsets)){
+  list_subsets[[i]] <- list_subsets[[i]][c(1,5,7)]
+}
+
+# merge those individual datasets by date (not year) and station
+merged_data <- Reduce(function(x,y) merge(x, y, by = c("Station", "day"), all = TRUE), list_subsets)
+
+merged_matrix <- data.matrix(merged_data[,c(6, 8:ncol(merged_data))])
+
+#take the average of all values
+merged_data$average <- rowMeans(merged_data[,c(6, 8:ncol(merged_data))], na.rm = TRUE)
+
+# standard deviation of each row
+merged_data$StdDev <- rowMads(merged_matrix, na.rm = TRUE)
+
+average3yeartemp_stddev <- merged_data[c(1:2,4:5,10:ncol(merged_data))]
+
+save("average3yeartemp_stddev", file = "average3yeartemp_StdDev_example.Rdata")
+
+```
+
+### Generic Example
+
+```{r, eval = FALSE}
+# get the averages before calculating accumulation
+avg_data$year <- substr(avg_data[,2], 1, 4)
+# get the date without the year
+avg_data$day <- substr(avg_data[,2], 5, 8)
+
+# break the dataset up by year
+years <- as.character(avg_data[!duplicated(avg_data$year),]$year)
+list_subsets <- list()
+
+for (i in years){
+  year_subset <- subset(avg_data, year == i)
+  varname = paste0("data_", i)
+  assign(varname, year_subset)
+  list_subsets[[i]] <- get(varname)
+}
+
+for (i in 2:length(list_subsets)){
+  list_subsets[[i]] <- list_subsets[[i]][c(1,5,7)]
+}
+
+# merge those individual datasets by date (not year) and station
+merged_data <- Reduce(function(x,y) merge(x, y, by = c("Station", "day"), all = TRUE), list_subsets)
+
+merged_matrix <- data.matrix(merged_data[,c(6, 8:ncol(merged_data))])
+
+#take the average of all values
+merged_data$average <- rowMeans(merged_data[,c(6, 8:ncol(merged_data))], na.rm = TRUE)
+
+# standard deviation of each row
+merged_data$StdDev <- rowMads(merged_matrix, na.rm = TRUE)
+
+averagemultiyeartemp_stddev <- merged_data[c(1:2,4:5,10:ncol(merged_data))]
+
+save("averagemultiyeartemp_stddev", file = "averagemultiyeartemp_StdDev.Rdata")
+
+```
+
+### Actual Output
+```{r}
+load("past_average10yeartemp_with_standard_dev.Rdata")
+load("present_10_yr_avg_with_sddev.Rdata")
+```
+
+# Calculating Growing Degree Day Accumulation
+These chunks calculate Growing Degree Day accumulation. One Growing Degree Day is accumulated for each degree Celsius that the daily average temperature exceeds a base temperature. Accumulation starts at the winter solstice in the northern hemisphere and at the summer solstice in the southern hemisphere.
+Growing Degree Days are calculated using the following formula:
+$GDD = TAVG - 10$
+GDD is the number of Growing Degree Days.
+TAVG is the average temperature.
+10 is the base temperature, 10 degrees Celsius.
+
+## 1941-1950
+```{r}
+load("past_average10yeartemp.Rdata")
+```
+
+```{r}
+# calculate degree days, 10 degrees Celsius is the base temperature
+past_avg10yrtemp$degreedays <- (past_avg10yrtemp[,5] - 10)
+
+# negative degree days count as 0
+past_avg10yrtemp[which(past_avg10yrtemp$degreedays < 0),]$degreedays <- 0
+
+past_avg10yrtemp$accum_dd <- NA
+
+past_avg10yrtemp <- past_avg10yrtemp[order(past_avg10yrtemp[,1], past_avg10yrtemp[,2]),]
+head(past_avg10yrtemp)
+```
+
+```{r}
+past_avg10yrtemp$TimeObject <- as.Date(past_avg10yrtemp$Date, format = "%m%d")
+```
+
+```{r}
+circ_dates <- list()
+
+circ_dates <- c(1:365, 1:365)
+
+past_avg10yrtemp$julian <- as.numeric(format(past_avg10yrtemp$TimeObject, "%j"))
+```
+
+```{r}
+past_southern <- past_avg10yrtemp[which(past_avg10yrtemp$Latitude < 0),]
+past_northern <- past_avg10yrtemp[which(past_avg10yrtemp$Latitude > 0),]
+```
+### Northern Hemisphere
+
+```{r, eval = FALSE}
+# start accumulation at the winter solstice
+past_northern$julianoffset <- circ_dates[as.numeric(past_northern$julian) + 11]
+
+past_northern <- past_northern[
+  order (past_northern[,1], past_northern[,10]),
+]
+
+head(past_northern)
+```
+
+```{r, eval= FALSE}
+# calculate accumulation
+list_stations <- as.character(past_northern[!duplicated(past_northern$Station),]$Station)
+
+northern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(northern_hemi_accum) <- names(past_northern)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(past_northern, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,6]
+    data_1[j,7] <- dd_sum
+  }
+  dd_sum <- 0
+  northern_hemi_accum <- rbind(northern_hemi_accum, data_1)
+  print(i)
+}
+  
+northern_hemi_accum <- northern_hemi_accum[-1,]
+
+northern_hemi_accum <- data.frame(northern_hemi_accum)
+
+coord <- coordinates((northern_hemi_accum[,4:3]))
+pts_northern <- SpatialPointsDataFrame(data =northern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_northern", file = "past_dd_accum_northern_points.Rdata")
+```
+
+### Southern Hemisphere
+
+```{r, eval= FALSE}
+# start accumulation at the summer solstice
+past_southern$julianoffset <- circ_dates[as.numeric(past_southern$julian) + 195]
+
+past_southern <- past_southern[
+  order (past_southern[,1], past_southern[,10]),
+]
+
+head(past_southern)
+```
+
+```{r, eval = FALSE}
+# calculate accumulation
+list_stations <- as.character(past_southern[!duplicated(past_southern$Station),]$Station)
+
+southern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(southern_hemi_accum) <- names(past_southern)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(past_southern, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,6]
+    data_1[j,7] <- dd_sum
+  }
+  dd_sum <- 0
+  southern_hemi_accum <- rbind(southern_hemi_accum, data_1)
+  print(i)
+}
+  
+southern_hemi_accum <- southern_hemi_accum[-1,]
+
+southern_hemi_accum <- data.frame(southern_hemi_accum)
+
+coord <- coordinates((southern_hemi_accum[,4:3]))
+pts_southern <- SpatialPointsDataFrame(data =southern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_southern", file = "past_dd_accum_southern_points.Rdata")
+```
+
+## 2007-2016
+
+```{r}
+load("average10yeartemp.Rdata")
+```
+
+```{r}
+# calculate degree days, 10 degrees Celsius is the base temperature
+average10yrtemp$degreedays <- (average10yrtemp[,5] - 10)
+
+# negative degree days count as 0
+average10yrtemp[which(average10yrtemp$degreedays < 0),]$degreedays <- 0
+
+average10yrtemp$accum_dd <- NA
+
+average10yrtemp <- average10yrtemp[order(average10yrtemp[,1], average10yrtemp[,2]),]
+head(average10yrtemp)
+```
+
+```{r}
+average10yrtemp$TimeObject <- as.Date(average10yrtemp$day, format = "%m%d")
+```
+
+```{r}
+circ_dates <- list()
+
+circ_dates <- c(1:365, 1:365)
+
+average10yrtemp$julian <- as.numeric(format(average10yrtemp$TimeObject, "%j"))
+```
+
+```{r}
+mod_northern <- average10yrtemp[which(average10yrtemp$Latitude > 0),]
+mod_southern <- average10yrtemp[which(average10yrtemp$Latitude < 0),]
+```
+
+### Northern Hemisphere
+
+```{r, eval = FALSE}
+# start accumulation at the winter solstice
+mod_northern$julianoffset <- circ_dates[as.numeric(mod_northern$julian) + 11]
+
+mod_northern <- mod_northern[
+  order (mod_northern[,1], mod_northern[,10]),
+]
+
+head(mod_northern)
+```
+
+```{r, eval = FALSE}
+# calculate accumulation
+list_stations <- as.character(mod_northern[!duplicated(mod_northern$Station),]$Station)
+
+northern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(northern_hemi_accum) <- names(mod_northern)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(mod_northern, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,4]
+    data_1[j,3] <- dd_sum
+  }
+  dd_sum <- 0
+  northern_hemi_accum <- rbind(northern_hemi_accum, data_1)
+  print(i)
+}
+  
+northern_hemi_accum <- northern_hemi_accum[-1,]
+
+northern_hemi_accum <- data.frame(northern_hemi_accum)
+
+coord <- coordinates((northern_hemi_accum[,7:6]))
+pts_northern_mod <- SpatialPointsDataFrame(data =northern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_northern_mod", file = "modern_dd_accum_northern_points.Rdata")
+```
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+# start accumulation at the summer solstice
+mod_southern$julianoffset <- circ_dates[as.numeric(mod_southern$julian) + 195]
+
+mod_southern <- mod_southern[
+  order (mod_southern[,1], mod_southern[,10]),
+]
+
+head(mod_southern)
+```
+
+```{r, eval = FALSE}
+# calculate accumulation
+list_stations <- as.character(mod_southern[!duplicated(mod_southern$Station),]$Station)
+
+southern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(southern_hemi_accum) <- names(pts_southern_mod)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(mod_southern, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,4]
+    data_1[j,3] <- dd_sum
+  }
+  dd_sum <- 0
+  southern_hemi_accum <- rbind(southern_hemi_accum, data_1)
+  print(i)
+}
+  
+southern_hemi_accum <- southern_hemi_accum[-1,]
+
+head(southern_hemi_accum)
+
+southern_hemi_accum <- data.frame(southern_hemi_accum)
+
+coord <- coordinates((southern_hemi_accum[,7:6]))
+pts_southern_mod <- SpatialPointsDataFrame(data =southern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_southern_mod", file = "present_dd_accum_southern_points.Rdata")
+```
+
+# Interpolating Growing Degree Day Accumulation
+I use interpolation to
+
+## 1941-1950 Interpolation
+
+### Northern Hemisphere
+
+```{r, eval = FALSE}
+# interpolate northern hemisphere
+Color <- colorRampPalette(c("blue3", "palevioletred1", "goldenrod1", "white"), bias = 1.6)
+
+northern_hemi <- crop(continents, extent(-180, 180, 0, 90 ))
+plot(northern_hemi)
+
+list_dates <- 1:365
+
+grd <- as.data.frame(spsample(pts_northern, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[365]
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_northern[which(pts_northern$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- northern_hemi
+    masked <- mask(ridw, northern_hemi)
+    save("masked", file = paste0("Past Interpolation Northern/", as.character(i), "past_northern.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,8000,100), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_past_northern.gif", interval = 0.5)
+```
+![](global_interpolation_past_northern.gif)
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+# interpolate southern hemisphere
+Color <- colorRampPalette(c("blue3", "palevioletred1", "goldenrod1", "white"), bias = 1.6)
+
+continents <- readShapePoly("continents/continent.shp")
+continents <- continents[which(continents$CONTINENT != "Antarctica"),]
+
+southern_hemi <- crop(continents, extent(-180, 180, -90, 0 ))
+plot(southern_hemi)
+
+list_dates <- 1:365
+
+grd <- as.data.frame(spsample(pts_southern, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[365]
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_southern[which(pts_southern$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- southern_hemi
+    masked <- mask(ridw, southern_hemi)
+    save("masked", file = paste0("Past Interpolation Southern/", as.character(i), "past_northern.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,2000,80), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_past_southern.gif")
+```
+![](global_interpolation_past_southern.gif)
+
+## 2007-2016 Interpolation
+
+### Northern Hemisphere
+
+```{r, eval = FALSE}
+continents <- readShapePoly("continents/continent.shp")
+continents <- continents[which(continents$CONTINENT != "Antarctica"),]
+
+Color <- colorRampPalette(c("blue3", "palevioletred1", "goldenrod1", "white"), bias = 1.6)
+
+northern_hemi <- crop(continents, extent(-180, 180, 0, 90 ))
+plot(northern_hemi)
+
+list_dates <- 1:365
+
+grd <- as.data.frame(spsample(pts_northern_mod, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[365]
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_northern_mod[which(pts_northern_mod$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- northern_hemi
+    masked <- mask(ridw, northern_hemi)
+    save("masked", file = paste0("Present Interpolation Northern/", as.character(i), "present_northern.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,8000,100), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_present_northern.gif", interval = 0.5)
+```
+![](global_interpolation_present_northern.gif)
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+# interpolate southern hemisphere
+Color <- colorRampPalette(c("blue3", "palevioletred1", "goldenrod1", "white"), bias = 1.6)
+
+continents <- readShapePoly("continents/continent.shp")
+continents <- continents[which(continents$CONTINENT != "Antarctica"),]
+
+southern_hemi <- crop(continents, extent(-180, 180, -90, 0 ))
+plot(southern_hemi)
+
+list_dates <- 1:365
+
+grd <- as.data.frame(spsample(pts_southern_mod, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[365]
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_southern_mod[which(pts_southern_mod$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- southern_hemi
+    masked <- mask(ridw, southern_hemi)
+    save("masked", file = paste0("Present Interpolation Southern/", as.character(i), "present_southern.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,8000,100), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_present_southern.gif")
+```
+![](global_interpolation_present_southern.gif)
+
+# Calculating Heating Degree Day Accumulation
+
+## 1941-1950
+
+### Northern Hemisphere
+```{r, eval = FALSE}
+# calculate heating degree days
+pts_northern_heating <- pts_northern
+
+pts_northern_heating$DegreeDays <- 10 - pts_northern_heating$TAVG
+pts_northern_heating@data[which(pts_northern_heating@data$DegreeDays < 0),]$DegreeDays <- 0
+
+list_stations <- as.character(pts_northern_heating@data[!duplicated(pts_northern_heating@data$Station),]$Station)
+
+# calculate heating degree day accumulation
+
+circ_dates <- list()
+
+circ_dates <- c(1:365, 1:365)
+
+pts_northern_heating$julianoffset <- circ_dates[as.numeric(pts_northern_heating$julian) + 195]
+
+pts_northern_heating@data <- pts_northern_heating@data[
+  order (pts_northern_heating@data[,1], pts_northern_heating@data[,10]),
+]
+
+head(pts_northern_heating)
+
+northern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(northern_hemi_accum) <- names(pts_northern_heating)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(pts_northern_heating@data, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,6]
+    data_1[j,7] <- dd_sum
+  }
+  dd_sum <- 0
+  northern_hemi_accum <- rbind(northern_hemi_accum, data_1)
+  print(i)
+}
+  
+northern_hemi_accum <- northern_hemi_accum[-1,]
+
+head(northern_hemi_accum)
+
+northern_hemi_accum <- data.frame(northern_hemi_accum)
+
+coord <- coordinates((northern_hemi_accum[,4:3]))
+pts_northern_heating <- SpatialPointsDataFrame(data =northern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_northern_heating", file = "past_heating_dd_accum_northern_points.Rdata")
+```
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+# calculate heating degree days
+pts_southern_heating <- pts_southern
+
+pts_southern_heating$DegreeDays <- 10 - pts_southern_heating$TAVG
+pts_southern_heating@data[which(pts_southern_heating@data$DegreeDays < 0),]$DegreeDays <- 0
+
+list_stations <- as.character(pts_southern@data[!duplicated(pts_southern@data$Station),]$Station)
+
+# calculate heating degree day accumulation
+
+circ_dates <- list()
+
+circ_dates <- c(1:365, 1:365)
+
+pts_southern_heating$julianoffset <- circ_dates[as.numeric(pts_southern_heating$julian) + 11]
+
+pts_southern_heating@data <- pts_southern_heating@data[
+  order (pts_southern_heating@data[,1], pts_southern_heating@data[,10]),
+]
+
+head(pts_southern_heating)
+
+southern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(southern_hemi_accum) <- names(pts_southern_heating)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(pts_southern_heating@data, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,6]
+    data_1[j,7] <- dd_sum
+  }
+  dd_sum <- 0
+  southern_hemi_accum <- rbind(southern_hemi_accum, data_1)
+  print(i)
+}
+  
+southern_hemi_accum <- southern_hemi_accum[-1,]
+
+southern_hemi_accum <- data.frame(southern_hemi_accum)
+
+coord <- coordinates((southern_hemi_accum[,4:3]))
+pts_southern_heating <- SpatialPointsDataFrame(data =southern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_southern_heating", file = "past_heating_dd_accum_southern_points.Rdata")
+```
+
+## 2007-2016
+
+### Northern Hemisphere
+
+```{r, eval = FALSE}
+# calculate heating degree days
+pts_northern_heating_mod <- pts_northern_mod
+
+pts_northern_heating_mod$degreedays <- 10 - pts_northern_heating_mod$average
+pts_northern_heating_mod@data[which(pts_northern_heating_mod@data$degreedays < 0),]$degreedays <- 0
+
+list_stations <- as.character(pts_northern_heating_mod@data[!duplicated(pts_northern_heating_mod@data$Station),]$Station)
+
+# calculate heating degree day accumulation
+
+circ_dates <- list()
+
+circ_dates <- c(1:365, 1:365)
+
+pts_northern_heating_mod$julianoffset <- circ_dates[as.numeric(pts_northern_heating_mod$julian) + 195]
+
+pts_northern_heating_mod@data <- pts_northern_heating_mod@data[
+  order (pts_northern_heating_mod@data[,1], pts_northern_heating_mod@data[,10]),
+]
+
+head(pts_northern_heating_mod)
+
+northern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(northern_hemi_accum) <- names(pts_northern_heating_mod)
+
+dd_sum <- 0
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(pts_northern_heating_mod@data, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,4]
+    data_1[j,3] <- dd_sum
+  }
+  dd_sum <- 0
+  northern_hemi_accum <- rbind(northern_hemi_accum, data_1)
+  print(i)
+}
+  
+northern_hemi_accum <- northern_hemi_accum[-1,]
+
+head(northern_hemi_accum)
+
+northern_hemi_accum <- data.frame(northern_hemi_accum)
+
+coord <- coordinates((northern_hemi_accum[7:6]))
+pts_northern_heating_mod <- SpatialPointsDataFrame(data =northern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_northern_heating_mod", file = "present_heating_dd_accum_northern_points.Rdata")
+```
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+# calculate heating degree days
+pts_southern_heating_mod <- pts_southern_mod
+
+pts_southern_heating_mod$degreedays <- 10 - pts_southern_heating_mod$average
+pts_southern_heating_mod@data[which(pts_southern_heating_mod@data$degreedays < 0),]$degreedays <- 0
+
+list_stations <- as.character(pts_southern_heating_mod@data[!duplicated(pts_southern_heating_mod@data$Station),]$Station)
+
+# calculate heating degree day accumulation
+
+circ_dates <- list()
+
+circ_dates <- c(1:365, 1:365)
+
+pts_southern_heating_mod$julianoffset <- circ_dates[as.numeric(pts_southern_heating_mod$julian) + 11]
+
+pts_southern_heating_mod@data <- pts_southern_heating_mod@data[
+  order (pts_southern_heating_mod@data[,1], pts_southern_heating_mod@data[,10]),
+]
+
+head(pts_southern_heating_mod)
+
+southern_hemi_accum <- c(NA, NA, NA, NA, NA, NA, NA, NA, NA, NA)
+names(southern_hemi_accum) <- names(pts_southern_heating_mod)
+
+dd_sum <- 0
+
+i <- list_stations[1]
+
+for (i in list_stations){
+  dd_sum <- 0
+  data_1 <- subset(pts_southern_heating_mod@data, Station == i)
+  for (j in 1:nrow(data_1)){
+    dd_sum <- dd_sum + data_1[j,4]
+    data_1[j,3] <- dd_sum
+  }
+  dd_sum <- 0
+  southern_hemi_accum <- rbind(southern_hemi_accum, data_1)
+  print(i)
+}
+  
+southern_hemi_accum <- southern_hemi_accum[-1,]
+
+southern_hemi_accum <- data.frame(southern_hemi_accum)
+
+head(southern_hemi_accum)
+
+coord <- coordinates((southern_hemi_accum[,7:6]))
+pts_southern_heating_mod <- SpatialPointsDataFrame(data =southern_hemi_accum, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+save("pts_southern_heating_mod", file = "present_heating_dd_accum_southern_points.Rdata")
+```
+
+# Heating Degree Day Interpolation
+## 1941-1950
+### Northern Hemisphere
+
+```{r, eval = FALSE}
+load("past_heating_dd_accum_northern_points.Rdata")
+
+# interpolate, using IDW with idp of 3.5 -- maybe do kriging later?
+
+grd <- as.data.frame(spsample(pts_northern_heating, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[354]
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_northern_heating[which(pts_northern_heating$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- northern_hemi
+    masked <- mask(ridw, northern_hemi)
+    save("masked", file = paste0("~/Desktop/Past Interpolation Northern HDD/", as.character(i), "past_northern_heating.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,2000,100), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_past_northern_HDD.gif")
+```
+![](global_interpolation_past_northern_HDD.gif)
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+load("past_heating_dd_accum_southern_points.Rdata")
+
+# interpolate, using IDW with idp of 3.5 -- maybe do kriging later?
+
+grd <- as.data.frame(spsample(pts_southern_heating, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[354]
+
+max(pts_southern_heating$accum_dd)
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_southern_heating[which(pts_southern_heating$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- southern_hemi
+    masked <- mask(ridw, southern_hemi)
+    save("masked", file = paste0("~/Desktop/Past Interpolation Southern HDD/", as.character(i), "past_southern_heating.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,50,1), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_past_southern_HDD.gif")
+
+```
+![](global_interpolation_past_southern_HDD.gif)
+
+## 2007-2016
+### Northern Hemisphere
+
+```{r, eval= FALSE}
+load("present_heating_dd_accum_northern_points.Rdata")
+
+# interpolate, using IDW with idp of 3.5 -- maybe do kriging later?
+continents <- readShapePoly("continents/continent.shp")
+continents <- continents[which(continents$CONTINENT != "Antarctica"),]
+northern_hemi <- crop(continents, extent(-180, 180, 0, 90 ))
+plot(northern_hemi)
+
+list_dates <- 1:365
+
+grd <- as.data.frame(spsample(pts_northern_heating_mod, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[354]
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_northern_heating_mod[which(pts_northern_heating_mod$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- northern_hemi
+    masked <- mask(ridw, northern_hemi)
+    save("masked", file = paste0("~/Desktop/Present Interpolation Northern HDD/", as.character(i), "present_northern_heating.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,2000,100), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_present_northern_HDD.gif")
+```
+![](global_interpolation_present_northern_HDD.gif)
+
+### Southern Hemisphere
+
+```{r, eval = FALSE}
+load("present_heating_dd_accum_southern_points.Rdata")
+
+# interpolate, using IDW with idp of 3.5 -- maybe do kriging later?
+
+grd <- as.data.frame(spsample(pts_southern_heating_mod, "regular", n = 200000))
+names(grd) <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd) <- TRUE
+fullgrid(grd) <- TRUE
+crs(grd) <- CRS("+proj=longlat +datum=WGS84")
+
+i <- list_dates[354]
+
+max(pts_southern_heating_mod$accum_dd)
+
+saveGIF({
+  for (i in list_dates){
+    gs <- gstat::idw(formula = accum_dd~1, pts_southern_heating_mod[which(pts_southern_heating_mod$julian == i), ], newdata = grd, idp = 3.5)
+    ridw <- raster(gs)
+    extent(ridw) <- southern_hemi
+    masked <- mask(ridw, southern_hemi)
+    save("masked", file = paste0("~/Desktop/Present Interpolation Southern HDD/", as.character(i), "present_southern_heating.Rdata"))
+    idw_plot <- spplot(masked, at = seq(0,50,1), main=list(label=i, cex = 1))
+    print(idw_plot)
+    print(i)
+  }
+}, movie.name = "global_interpolation_present_southern_HDD.gif")
+
+```
+![](global_interpolation_present_southern_HDD.gif)
+
+# GIFS
+## All four gifs combined
+```{r, eval = FALSE}
+list_files_south <- list.files("~/Desktop/Past Interpolation Southern", full.names = TRUE)
+list_files_north <- list.files("~/Desktop/Past Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south[i] <- paste0("~/Desktop/Past Interpolation Southern/" , i, "past_northern.Rdata")
+  list_files_north[i] <- paste0("~/Desktop/Past Interpolation Northern/" , i, "past_northern.Rdata")
+}
+
+list_h_files_south <- list.files("~/Desktop/Past Interpolation Southern HDD", full.names = TRUE)
+list_h_files_north <- list.files("~/Desktop/Past Interpolation Northern HDD", full.names = TRUE)
+
+for (i in 1:365){
+  list_h_files_south[i] <- paste0("~/Desktop/Past Interpolation Southern HDD/" , i, "past_southern_heating.Rdata")
+  list_h_files_north[i] <- paste0("~/Desktop/Past Interpolation Northern HDD/" , i, "past_northern_heating.Rdata")
+}
+
+list_files_south_mod <- list.files("~/Desktop/Past Interpolation Southern", full.names = TRUE)
+list_files_north_mod <- list.files("~/Desktop/Past Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south_mod[i] <- paste0("~/Desktop/Present Interpolation Southern/" , i, "present_southern.Rdata")
+  list_files_north_mod[i] <- paste0("~/Desktop/Present Interpolation Northern/" , i, "present_northern.Rdata")
+}
+
+list_h_files_south_mod <- list.files("~/Desktop/Present Interpolation Southern HDD", full.names = TRUE)
+list_h_files_north_mod <- list.files("~/Desktop/Present Interpolation Northern HDD", full.names = TRUE)
+
+for (i in 1:365){
+  list_h_files_south_mod[i] <- paste0("~/Desktop/Present Interpolation Southern HDD/" , i, "present_southern_heating.Rdata")
+  list_h_files_north_mod[i] <- paste0("~/Desktop/Present Interpolation Northern HDD/" , i, "present_northern_heating.Rdata")
+}
+
+par(mfrow=c(2,2))
+saveGIF({
+  for (i in dates){
+    par(mfrow=c(2,2))
+    load(as.character(list_files_south[i]))
+    plot(masked, main = paste0("1941-1950 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_files_north[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+         load(as.character(list_files_south_mod[i]))
+         
+    plot(masked, main = paste0("2007-2016 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_files_north_mod[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+     load(as.character(list_h_files_south[i]))
+    plot(masked, main = paste0("1941-1950 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_h_files_north[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+    load(as.character(list_h_files_south_mod[i]))
+    plot(masked, main = paste0("2007-2016 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_h_files_north_mod[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+    print(i)
+    
+  }
+  
+}, movie.name = "global_interpolation_diff_n_and_s.gif", ani.width = 1000 , ani.height = 1000 , interval = 0.2)
+```
+![](global_interpolation_diff_n_and_s.gif)

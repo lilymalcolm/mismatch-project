@@ -1,0 +1,93 @@
+---
+title: "Ch 02: Birds"
+output: html_document
+---
+# Organizing Breeding Timing Data
+Here I transform the breeding timing data into a SpatialPointsDataFrame and then create a presence/absence matrix to show which birds are breeding on a given date.
+```{r}
+load("Global_bird_breeding_dates_julian.Rdata")
+
+# change dataframe into SpatialPointsDataFrame
+spring_data <- data.frame(spring_data)
+class(spring_data[,5]) <- "numeric"
+class(spring_data[,6]) <- "numeric"
+nonas <- spring_data[which(is.na(spring_data[,5])==FALSE | is.na(spring_data[,6])==FALSE),]
+nonas <- nonas[which(is.na(nonas[,5])==FALSE & is.na(nonas[,6])==FALSE),]
+
+coord <- coordinates((nonas[,6:5]))
+bird_pts <- SpatialPointsDataFrame(data =nonas, coords = coord, proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+# make a presence absence matrix
+namevector <- vector(length = 365)
+
+for (i in 1:365){
+  namevector[i] <- paste0("day", i)
+}
+
+dates_matrix <- data.frame(matrix(ncol = 365, nrow = 1780))
+dim(dates_matrix)
+
+colnames(dates_matrix) <- namevector
+dates_matrix[] <- 0
+
+bird_pts_binded <- spCbind(bird_pts, dates_matrix)
+bird_pts <- bird_pts_binded
+
+i <- namevector[1]
+for (i in namevector){
+  bird_pts[which(bird_pts$Egg_start_julian_date <= as.numeric(substr(i, 4, nchar(i))) & as.numeric(substr(i, 4, nchar(i))) <= bird_pts$Fledge_end_julian_date), 42 + as.numeric(substr(i, 4, nchar(i)))] <- 1
+  bird_pts[which(bird_pts$Egg_start_julian_date > bird_pts$Fledge_end_julian_date), 42 + as.numeric(substr(i, 4, nchar(i)))] <- 3
+  bird_pts[which(bird_pts[[i]] == 3 & as.numeric(substr(i, 4, nchar(i))) >= bird_pts$Egg_start_julian_date), 42 + as.numeric(substr(i, 4, nchar(i)))] <- 1
+  bird_pts[which(bird_pts[[i]] == 3 & as.numeric(substr(i, 4, nchar(i))) <= bird_pts$Egg_end_julian_date), 42 + as.numeric(substr(i, 4, nchar(i)))] <- 1
+  bird_pts[which(bird_pts[[i]] == 3), 42 + as.numeric(substr(i, 4, nchar(i)))] <- 0
+}
+
+bird_pts$day1 <- 0
+plot(bird_pts[which(bird_pts$day1 == 1),])
+
+save("bird_pts", file = "bird_points_presence_absence.Rdata")
+```
+
+```{r}
+load("bird_points_presence_absence.Rdata")
+```
+
+# Extracting Accumulated Degree Days
+Here I extract the number of degree days that have accumulated by the day that the birds lay their first eggs.
+```{r}
+nonas <- bird_pts[which(is.na(bird_pts$Egg_start_julian_date) == FALSE),]
+
+list_files_south <- list.files("Past Interpolation Southern", full.names = TRUE)
+list_files_north <- list.files("Past Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south[i] <- paste0("Past Interpolation Southern/" , i, "past_northern.Rdata")
+  list_files_north[i] <- paste0("Past Interpolation Northern/" , i, "past_northern.Rdata")
+}
+
+i <- 1
+
+nh_pts <- nonas[which(nonas$Lat > 0),]
+
+start_dd <- data.frame()
+
+for (i in 1:length(nh_pts)){
+  x <- round(nh_pts@data[i,35])
+  if(x > 0){
+  load(as.character(list_files_north[x]))
+  start_dd[i,1] <- extract(masked, nh_pts[i,])
+  }
+  else{
+    start_dd[i,1] <- NA
+  }
+}
+
+median(start_dd[,1], na.rm = TRUE)
+
+min(start_dd, na.rm = TRUE)
+min(nh_pts@data[,35])
+View(start_dd)
+
+```
+
+
