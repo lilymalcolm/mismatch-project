@@ -2,9 +2,25 @@
 title: "02_Birds"
 output: html_document
 ---
+```{r}
+library(matrixStats)
+library(sp)
+library(maptools)
+library(maps)
+library(raster)
+library(colorRamps)
+library(rgdal)
+library(scales)
+library(animation)
+library(dismo)
+library(deldir)
+library(rgeos)
+library(gstat)
+```
+
 # Organizing Breeding Timing Data
 Here I transform the breeding timing data into a SpatialPointsDataFrame and then create a presence/absence matrix to show which birds are breeding on a given date.
-```{r}
+```{r, eval = FALSE}
 load("Global_bird_breeding_dates_julian.Rdata")
 
 # change dataframe into SpatialPointsDataFrame
@@ -52,8 +68,57 @@ save("bird_pts", file = "bird_points_presence_absence.Rdata")
 load("bird_points_presence_absence.Rdata")
 ```
 
+## Plotting Breeding Birds Pre-Climate Change and Post-Climate Change
+Here I plot points representing breeding birds throughout the year on top of the  1941-1950 raster and on top of the 2007-2016 raster.
+
+```{r, eval = FALSE}
+list_dates <- seq(as.Date("2017-01-01"), as.Date("2017-12-31"), by = "day")
+list_dates <- format(list_dates, format = "%b %d")
+
+list_files_south <- list.files("Past Interpolation Southern", full.names = TRUE)
+list_files_north <- list.files("Past Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south[i] <- paste0("Past Interpolation Southern/" , i, "past_northern.Rdata")
+  list_files_north[i] <- paste0("Past Interpolation Northern/" , i, "past_northern.Rdata")
+}
+
+list_files_south_mod <- list.files("Present Interpolation Southern", full.names = TRUE)
+list_files_north_mod <- list.files("Present Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south_mod[i] <- paste0("Present Interpolation Southern/" , i, "present_southern.Rdata")
+  list_files_north_mod[i] <- paste0("Present Interpolation Northern/" , i, "present_northern.Rdata")
+}
+
+c1 <- colorRampPalette(c("navy", "blue", "magenta2", "indianred1", "yellow", "white"), bias = 8.5)
+
+saveGIF({
+  for (i in 1:365){
+    par(mfrow=c(1,2))
+    load(as.character(list_files_south[i]))
+    plot(masked, main = paste0("1941-1950 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,6000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_files_north[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,6000, by = 100), legend = FALSE)
+    plot(bird_pts[which(bird_pts[[paste0("day", i)]]==1),], add = TRUE, pch = 16, cex = 0.5, col = "lawngreen")
+    
+    load(as.character(list_files_south_mod[i]))
+    plot(masked, main = paste0("2007-2016 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,6000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_files_north_mod[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,6000, by = 100), legend = FALSE)
+    plot(bird_pts[which(bird_pts[[paste0("day", i)]]==1),], add = TRUE, pch = 16, cex = 0.5, col = "lawngreen")
+    print(i)
+  }
+}, movie.name = "global_interpolation_birds.gif", ani.width = 1000, ani.height = 500, interval = 0.3)
+```
+![](global_interpolation_birds.gif)
+
 # Extracting Accumulated Degree Days
-Here I extract the number of degree days that have accumulated by the day that the birds lay their first eggs.
+Here I extract the number of degree days that have accumulated by the day that the birds lay their first eggs. I extract values from the pre-climate change raster and from the post-climate change raster.
+
+## 1941-1950 Raster Extractions
 ```{r}
 nonas <- bird_pts[which(is.na(bird_pts$Egg_start_julian_date) == FALSE),]
 
@@ -65,8 +130,7 @@ for (i in 1:365){
   list_files_north[i] <- paste0("Past Interpolation Northern/" , i, "past_northern.Rdata")
 }
 
-i <- 1
-
+# only looking at the northern hemisphere
 nh_pts <- nonas[which(nonas$Lat > 0),]
 
 start_dd <- data.frame()
@@ -82,12 +146,44 @@ for (i in 1:length(nh_pts)){
   }
 }
 
+# median degree days accumulated on day of first egg
 median(start_dd[,1], na.rm = TRUE)
 
-min(start_dd, na.rm = TRUE)
-min(nh_pts@data[,35])
-View(start_dd)
+# mean degree days accumulated on day of first egg
+mean(start_dd[,1], na.rm = TRUE)
 
 ```
 
+## 2007-2016 Raster Extractions
+```{r}
+list_files_south_mod <- list.files("Present Interpolation Southern", full.names = TRUE)
+list_files_north_mod <- list.files("Present Interpolation Northern", full.names = TRUE)
 
+for (i in 1:365){
+  list_files_south_mod[i] <- paste0("Present Interpolation Southern/" , i, "present_southern.Rdata")
+  list_files_north_mod[i] <- paste0("Present Interpolation Northern/" , i, "present_northern.Rdata")
+}
+
+# only looking at the northern hemisphere
+nh_pts <- nonas[which(nonas$Lat > 0),]
+
+start_dd <- data.frame()
+
+for (i in 1:length(nh_pts)){
+  x <- round(nh_pts@data[i,35])
+  if(x > 0){
+  load(as.character(list_files_north_mod[x]))
+  start_dd[i,1] <- extract(masked, nh_pts[i,])
+  }
+  else{
+    start_dd[i,1] <- NA
+  }
+}
+
+# median degree days accumulated on day of first egg
+median(start_dd[,1], na.rm = TRUE)
+
+# mean degree days accumulated on day of first egg
+mean(start_dd[,1], na.rm = TRUE)
+
+```

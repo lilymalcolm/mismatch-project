@@ -21,10 +21,6 @@ library(gstat)
 # Organizing NOAA Data
 These chunks take raw data from The National Oceanic and Atmospheric Administration's daily climate summaries and join them into one dataframe.
 
-Menne, M.J., I. Durre, R.S. Vose, B.E. Gleason, and T.G. Houston, 2012:  An overview 
-of the Global Historical Climatology Network-Daily Database.  Journal of Atmospheric 
-and Oceanic Technology, 29, 897-910, doi:10.1175/JTECH-D-11-00103.1.
-
 ## Working Example
 ```{r}
 data_2014_to_2016 <- c(NA, NA, NA, NA)
@@ -395,12 +391,12 @@ load("present_10_yr_avg_with_sddev.Rdata")
 ```
 
 # Calculating Growing Degree Day Accumulation
-These chunks calculate Growing Degree Day accumulation. One Growing Degree Day is accumulated for each degree Celsius that the daily average temperature exceeds a base temperature. Accumulation starts at the winter solstice in the northern hemisphere and at the summer solstice in the southern hemisphere.
-Growing Degree Days are calculated using the following formula:
-$GDD = TAVG - 10$
-GDD is the number of Growing Degree Days.
-TAVG is the average temperature.
-10 is the base temperature, 10 degrees Celsius.
+These chunks calculate Growing Degree Day accumulation. One Growing Degree Day is accumulated for each degree Celsius that the daily average temperature exceeds a base temperature. Accumulation starts at the winter solstice in the northern hemisphere and at the summer solstice in the southern hemisphere.  
+Growing Degree Days are calculated using the following formula:  
+$GDD = TAVG - 10$  
+GDD is the number of Growing Degree Days.  
+TAVG is the average temperature.  
+10 is the base temperature, 10 degrees Celsius.  
 
 ## 1941-1950
 ```{r}
@@ -651,7 +647,7 @@ save("pts_southern_mod", file = "present_dd_accum_southern_points.Rdata")
 ```
 
 # Interpolating Growing Degree Day Accumulation
-I use interpolation to
+I use interpolation to estimate degree day accumulation values for cells that do not contain weather stations. I use IDW interpolation with an idp value of 3.5.
 
 ## 1941-1950 Interpolation
 
@@ -806,6 +802,13 @@ saveGIF({
 ![](global_interpolation_present_southern.gif)
 
 # Calculating Heating Degree Day Accumulation
+Growing Degree Days are useful for examining the transition from winter to spring and Heating Degree Days are useful for examining the transition from summer to fall. The following chunks calculate Heating Degree Day accumulation. One Heating Degree Day is accumulated for each degree Celsuis that the daily average temperature is below a base temperature.  
+Accumulation starts at the summer solstice in the northern hemisphere and at the winter solstice in the southern hemisphere.
+Heating Degree Days are calculated using the following formula:
+$HDD = 10 - TAVG$  
+HDD is the number of Heating Degree Days.  
+TAVG is the average temperature.  
+10 is the base temperature, 10 degrees Celsius.  
 
 ## 1941-1950
 
@@ -1027,6 +1030,8 @@ save("pts_southern_heating_mod", file = "present_heating_dd_accum_southern_point
 ```
 
 # Heating Degree Day Interpolation
+I again use IDW interpolation with an idp value of 3.5 to estimate Heating Degree Day accumulation values for cells that do not contain weather stations.
+
 ## 1941-1950
 ### Northern Hemisphere
 
@@ -1166,44 +1171,56 @@ saveGIF({
 ![](global_interpolation_present_southern_HDD.gif)
 
 # GIFS
-## All four gifs combined
+The following chunks produce various GIFS combining the previous plots.  
+
+This chunk lists the files that the GIFS reference.
+```{r}
+c1 <- colorRampPalette(c("navy", "blue", "magenta2", "indianred1", "yellow", "white"), bias = 6)
+c2 <- colorRampPalette(c("white", "yellow", "indianred1", "magenta2", "blue", "navy"), bias = 6)
+
+list_files_south <- list.files("Past Interpolation Southern", full.names = TRUE)
+list_files_north <- list.files("Past Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south[i] <- paste0("Past Interpolation Southern/" , i, "past_northern.Rdata")
+  list_files_north[i] <- paste0("Past Interpolation Northern/" , i, "past_northern.Rdata")
+}
+
+list_h_files_south <- list.files("Past Interpolation Southern HDD", full.names = TRUE)
+list_h_files_north <- list.files("Past Interpolation Northern HDD", full.names = TRUE)
+
+for (i in 1:365){
+  list_h_files_south[i] <- paste0("Past Interpolation Southern HDD/" , i, "past_southern_heating.Rdata")
+  list_h_files_north[i] <- paste0("Past Interpolation Northern HDD/" , i, "past_northern_heating.Rdata")
+}
+
+list_files_south_mod <- list.files("Present Interpolation Southern", full.names = TRUE)
+list_files_north_mod <- list.files("Present Interpolation Northern", full.names = TRUE)
+
+for (i in 1:365){
+  list_files_south_mod[i] <- paste0("Present Interpolation Southern/" , i, "present_southern.Rdata")
+  list_files_north_mod[i] <- paste0("Present Interpolation Northern/" , i, "present_northern.Rdata")
+}
+
+list_h_files_south_mod <- list.files("Present Interpolation Southern HDD", full.names = TRUE)
+list_h_files_north_mod <- list.files("Present Interpolation Northern HDD", full.names = TRUE)
+
+for (i in 1:365){
+  list_h_files_south_mod[i] <- paste0("Present Interpolation Southern HDD/" , i, "present_southern_heating.Rdata")
+  list_h_files_north_mod[i] <- paste0("Present Interpolation Northern HDD/" , i, "present_northern_heating.Rdata")
+}
+
+dates <- 1:365
+list_dates <- seq(as.Date("2017-01-01"), as.Date("2017-12-31"), by = "day")
+list_dates <- format(list_dates, format = "%b %d")
+```
+
+## Growing Degree Day Temporal Comparison GIF
+The following chunk produces a GIF of two maps: pre-climate change Growing Degree Day accumulation and post-climate change Growing Degree Day accumulation.
 ```{r, eval = FALSE}
-list_files_south <- list.files("~/Desktop/Past Interpolation Southern", full.names = TRUE)
-list_files_north <- list.files("~/Desktop/Past Interpolation Northern", full.names = TRUE)
-
-for (i in 1:365){
-  list_files_south[i] <- paste0("~/Desktop/Past Interpolation Southern/" , i, "past_northern.Rdata")
-  list_files_north[i] <- paste0("~/Desktop/Past Interpolation Northern/" , i, "past_northern.Rdata")
-}
-
-list_h_files_south <- list.files("~/Desktop/Past Interpolation Southern HDD", full.names = TRUE)
-list_h_files_north <- list.files("~/Desktop/Past Interpolation Northern HDD", full.names = TRUE)
-
-for (i in 1:365){
-  list_h_files_south[i] <- paste0("~/Desktop/Past Interpolation Southern HDD/" , i, "past_southern_heating.Rdata")
-  list_h_files_north[i] <- paste0("~/Desktop/Past Interpolation Northern HDD/" , i, "past_northern_heating.Rdata")
-}
-
-list_files_south_mod <- list.files("~/Desktop/Past Interpolation Southern", full.names = TRUE)
-list_files_north_mod <- list.files("~/Desktop/Past Interpolation Northern", full.names = TRUE)
-
-for (i in 1:365){
-  list_files_south_mod[i] <- paste0("~/Desktop/Present Interpolation Southern/" , i, "present_southern.Rdata")
-  list_files_north_mod[i] <- paste0("~/Desktop/Present Interpolation Northern/" , i, "present_northern.Rdata")
-}
-
-list_h_files_south_mod <- list.files("~/Desktop/Present Interpolation Southern HDD", full.names = TRUE)
-list_h_files_north_mod <- list.files("~/Desktop/Present Interpolation Northern HDD", full.names = TRUE)
-
-for (i in 1:365){
-  list_h_files_south_mod[i] <- paste0("~/Desktop/Present Interpolation Southern HDD/" , i, "present_southern_heating.Rdata")
-  list_h_files_north_mod[i] <- paste0("~/Desktop/Present Interpolation Northern HDD/" , i, "present_northern_heating.Rdata")
-}
-
-par(mfrow=c(2,2))
 saveGIF({
   for (i in dates){
-    par(mfrow=c(2,2))
+    par(mfrow=c(1,2))
     load(as.character(list_files_south[i]))
     plot(masked, main = paste0("1941-1950 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
     abline(h = 0, lty = 2)
@@ -1216,17 +1233,71 @@ saveGIF({
     load(as.character(list_files_north_mod[i]))
     plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
     
-     load(as.character(list_h_files_south[i]))
-    plot(masked, main = paste0("1941-1950 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    print(i)
+    
+  }
+  
+}, movie.name = "growing_dd_comparison.gif", ani.width =1000 , ani.height = 500 , interval = 0.4)
+```
+![](growing_dd_comparison.gif)
+
+## Heating Degree Day Temporal Comparison GIF
+The following chunk produces a GIF of two maps: pre-climate change Growing Degree Day accumulation and post-climate change Growing Degree Day accumulation.
+```{r, eval = FALSE}
+saveGIF({
+  for (i in dates){
+    par(mfrow=c(1,2))
+    load(as.character(list_h_files_south[i]))
+    plot(masked, main = paste0("1941-1950 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
     abline(h = 0, lty = 2)
     load(as.character(list_h_files_north[i]))
-    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    plot(masked, add = TRUE, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
     
     load(as.character(list_h_files_south_mod[i]))
-    plot(masked, main = paste0("2007-2016 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    plot(masked, main = paste0("2007-2016 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
     abline(h = 0, lty = 2)
     load(as.character(list_h_files_north_mod[i]))
+    plot(masked, add = TRUE, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+    print(i)
+    
+  }
+  
+}, movie.name = "heating_dd_comparison.gif", ani.width =1000 , ani.height = 500 , interval = 0.4)
+```
+
+![](heating_dd_comparison.gif)
+
+## Growing and Heating Degree Day Temporal Comparison GIF
+The following chunk produces a GIF of four maps: pre-climate change Growing Degree Day accumulation, post-climate change Growing Degree Day accumulation, pre-climate change Heating Degree Day accumulation, and post-climate change Heating Degree Day accumulation.
+```{r, eval = FALSE}
+par(mfrow=c(2,2))
+saveGIF({
+  for (i in dates){
+    par(mfrow=c(2,2))
+    load(as.character(list_files_south[i]))
+    plot(masked, main = paste0("1941-1950 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_files_north[i]))
     plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+    load(as.character(list_files_south_mod[i]))
+    plot(masked, main = paste0("2007-2016 Growing Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_files_north_mod[i]))
+    plot(masked, add = TRUE, col = c1(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+     load(as.character(list_h_files_south[i]))
+    plot(masked, main = paste0("1941-1950 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_h_files_north[i]))
+    plot(masked, add = TRUE, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
+    
+    load(as.character(list_h_files_south_mod[i]))
+    plot(masked, main = paste0("2007-2016 Heating Degree Day Accumulation | ", list_dates[i] ),  mar = c(2, 4, 1, 2) +0.1, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE, xlim = c(-180, 180), ylim = c(-90,90), asp = 1)
+    abline(h = 0, lty = 2)
+    load(as.character(list_h_files_north_mod[i]))
+    plot(masked, add = TRUE, col = c2(5000), breaks = seq(0,8000, by = 100), legend = FALSE)
     
     print(i)
     
